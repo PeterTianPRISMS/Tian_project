@@ -1,0 +1,166 @@
+---
+title: "The factors that influence incomes "
+author: "Peng Tian"
+date: "April 25, 2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+library(tidyverse)
+library(modelr)
+```
+
+### Everyone must know that the income is related with the years of schooling, races and sex. But have you ever thought about the relationship between your height and your annual income. The BLS National Longitudinal Surveys (NLS) tracked the income, education, and life circumstances of a large cohort of Americans across several decades. A small sample of the whole data is included in the package modelr. I will use this sample data to try to develop the model that detect the factors influencing incomes.
+
+### 1. Plots the height and income
+```{r}
+#PLot the height using ggplot and plot it again after adjusting.
+ggplot(data=heights, aes(heights$height)) + geom_histogram()
+ggplot(data=heights, aes(heights$height)) + 
+  geom_histogram(aes(y =..density..), 
+                 breaks=seq(50, 80, by = 2), 
+                 col="red", 
+                 fill="green", 
+                 alpha = .2) + 
+  geom_density(col=2) + 
+  labs(title="Histogram for Heights") +
+  labs(x="Heights", y="Count")
+
+ggplot(data=heights, aes(heights$income)) + geom_histogram()
+ggplot(data=heights, aes(heights$income)) + 
+  geom_histogram(aes(y =..density..), 
+                 breaks=seq(0, by = 2), 
+                 col="red", 
+                 fill="green", 
+                 alpha = .2) + 
+  geom_density(col=2) + 
+  labs(title="Histogram for Incomes") +
+  labs(x="Incomes", y="Count")
+
+```
+### 2. Visualize the relationship between height and income
+```{r}
+ggplot(heights, aes(height, income)) +
+  geom_point()+
+  ggtitle("the relationship between height and income")+
+  xlab("Height") + ylab("Income")+
+  geom_smooth()
+  
+```
+### Can you detect any relationship between these two variables? How do you descibe the relationship? We can inspect the od straight line one the top of the plot. This is because the Bureau of Labor Statistics removed the top 2% of income values and replaced them with the mean value of the top 2% of values. So I am going to throw out these data since it is not the original income and plot the data again.
+```{r}
+heights <- heights %>% filter(income < 180000)
+ggplot(heights, aes(height, income)) +
+  geom_point()+
+  ggtitle("the relationship between height and income")+
+  xlab("Height") + ylab("Income")+
+  geom_smooth()
+```
+### Next step I will try to develop the model. Firstly, I am going to start with the simple linear model.
+
+```{r}
+m1 <- lm(income ~ height, data = heights)
+m1
+
+```
+### So far my model is Income = -69597 + 1535*Height. We can get the coeffients from the summary of the model. We can visulize our result as well. The model is quite simple so far and the residuals don't behave like white noise. 
+```{r}
+ggplot(heights, aes(height, income)) +
+  geom_boxplot(aes(group = height)) +
+  geom_smooth(method = lm, se = FALSE)
+plot(m1$residuals)
+```
+### We can add more variables into the model. Firslty, we check the difference between the male heights and femal heights. We try to add the sex and education into the model.
+```{r}
+ggplot(heights, aes(height, colour = sex)) + 
+  geom_freqpoly(binwidth = 1)+
+  ggtitle("the male heights and female heights")
+  
+```
+
+```{r}
+m2 <- lm(income ~ height * sex, data = heights)
+m2
+grid <- heights %>% 
+  expand(height, sex) %>% 
+  add_predictions(m2, "income")
+
+ggplot(heights, aes(height, income)) + 
+  geom_point() + 
+  geom_line(data = grid) +
+  facet_wrap(~sex)
+```
+
+```{r}
+m3 <- lm(income ~ height * sex * education, data = heights)
+m3
+```
+### We can check the model adequate later. So far the model is getting more complicated. The data we used is just the sample from package modelr. Now, I am going to download another data online 
+```{r}
+new_data = read.table("http://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data", sep=",", header=F, col.names=c("age", "type_employer", "fnlwgt", "education", "education_num", "marital", "occupation", "relationship", "race", "sex", "capital_gain", "capital_loss", "hr_per_week", "country", "income"), fill=FALSE, strip.white=T)
+
+glimpse(new_data)
+
+```
+### Next step, I do some data-cleanup. We combine "Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", "11th" and "12th" groups to "Dropout" group, "Assoc-acdm" and "Assoc-voc" groups to "Associates" group, "HS-grad" and "Some-college" groups to "HS-Graduate" group.
+```{r}
+
+new_data$education = as.character(new_data$education)
+new_data$education = str_replace_all(new_data$education,"^Preschool","Dropout")
+new_data$education = str_replace_all(new_data$education,"^1st-4th","Dropout")
+new_data$education = str_replace_all(new_data$education,"^5th-6th","Dropout")
+new_data$education = str_replace_all(new_data$education,"^7th-8th","Dropout")
+new_data$education = str_replace_all(new_data$education,"^9th","Dropout")
+new_data$education = str_replace_all(new_data$education,"^10th","Dropout")
+new_data$education = str_replace_all(new_data$education,"^11th","Dropout")
+new_data$education = str_replace_all(new_data$education,"^12th","Dropout")
+new_data$education = str_replace_all(new_data$education,"^Assoc-acdm","Associates")
+new_data$education = str_replace_all(new_data$education,"^Assoc-voc","Associates")
+new_data$education = str_replace_all(new_data$education,"^Bachelors","Bachelors")
+new_data$education = str_replace_all(new_data$education,"^HS-grad","HS-graduate")
+new_data$education = str_replace_all(new_data$education,"^Some-college","Colleges")
+table(new_data$education)
+```
+### We can visulize the relationship between income and education
+```{r}
+new_data$n <- 1
+group_data <-new_data %>%
+  group_by(education,income) %>%
+  summarise(total = sum(n, na.rm = TRUE))
+ggplot(group_data, aes(education,total, fill=income)) + 
+  geom_bar(stat="identity", position=position_dodge())+
+  theme(plot.title = element_text(hjust = 0.5))+
+  ggtitle("the Plot between the Income and education")+
+  scale_colour_discrete(labels = c("<=50K", ">50K"), name = "Income")+
+  scale_fill_manual(values=c('#999999','#E69F00'))
+```
+### Similiarly, we can group the data by sex, and plot the income by sex.
+```{r}
+group_data2 <-new_data %>%
+  group_by(sex,income) %>%
+  summarise(total = sum(n, na.rm = TRUE))
+ggplot(group_data2, aes(sex,total, fill=income)) + 
+  geom_bar(stat="identity", position=position_dodge())+
+  theme(plot.title = element_text(hjust = 0.5))+
+  ggtitle("the Plot between the Income and Sex")+
+  scale_colour_discrete(labels = c("<=50K", ">50K"), name = "Income")+
+  scale_fill_manual(values=c('#999999','#E69F00'))
+```
+
+
+### The income by age is more complicated because the age is numerical. So the plot will give the income distribution in differrent ages.
+```{r}
+group_data3 <-new_data %>%
+  group_by(age,income) %>%
+  summarise(total = sum(n, na.rm = TRUE))
+ggplot(group_data3, aes(age,total, fill=income)) + 
+  geom_bar(stat="identity", position=position_dodge())+
+  theme(plot.title = element_text(hjust = 0.5))+
+  ggtitle("the Plot between the Income and Age")+
+  scale_colour_discrete(labels = c("<=50K", ">50K"), name = "Income")+
+  scale_fill_manual(values=c('#999999','#E69F00'))
+```
+
+### There are so many factors of influencing income level. I used the two different data source to reveal a part of the relations in this project. 
